@@ -16,10 +16,6 @@ pub struct Data {
     pub database: Database,
 }
 
-pub fn initialize() {
-
-}
-
 pub fn toml_read() -> Option<Data>{
     let file = "config.toml";
 

@@ -163,7 +163,7 @@ fn show(mut args: Vec<String>, mut conn: PooledConn) {
     if args.len() != 0 {
         query.push_str(" where ");
         if args[0] != "-" {
-            query.push_str(&format!("site_name = '{}'", args[0]));
+            query.push_str(&format!("site_name like '%{}%'", args[0]));
         }
         if args[1] != "-" {
             if args[0] != "-" {
@@ -182,7 +182,7 @@ fn show(mut args: Vec<String>, mut conn: PooledConn) {
     let ans: Vec<Row> = conn.query(query).unwrap();
 
     if ans.is_empty() {
-        println!("No Such Records Found!'");
+        println!("No Such Records Found!");
         println!("Need help with show? try 'pass help show'");
         return;
     }
@@ -199,6 +199,9 @@ fn show(mut args: Vec<String>, mut conn: PooledConn) {
 
 }
 
+fn update(mut args: Vec<String>, mut conn: PooledConn) {
+    
+}
 
 //Driver functions
 fn main() {
@@ -218,8 +221,7 @@ fn main() {
         host = data.database.host;
         port = data.database.port;
         db = data.database.db
-    }
-    else {
+    } else {
         println!("can't get the database information, check if config.toml file exists");
         return;
     }
