@@ -2,7 +2,7 @@ pub mod toml_reader;
 
 use mysql::{prelude::Queryable, *};
 use std::{env, io::Write};
-
+use chrono::{Local, DateTime};
 //help function
 fn help(arg: String) {
     match arg.as_str() {
@@ -49,9 +49,9 @@ fn help(arg: String) {
 }
 
 //delete record from database
-fn delete(arg: String, conn: Pool) {
-    let mut query = String::from("delete from passwords where ");
-    let result = row_with_index(conn.get_conn().unwrap(), arg);
+fn delete(arg: String, conn: Pool, table_name: String) {
+    let mut query = format!("delete from {} where ", table_name);
+    let result = row_with_index(conn.get_conn().unwrap(), arg, table_name);
 
     let result = match result {
         Some(row) => row,
@@ -112,8 +112,8 @@ fn delete(arg: String, conn: Pool) {
 }
 
 //Show the records filtered with site_name and return them.
-fn row_with_index(mut conn : PooledConn, arg: String) -> Option<Vec<Row>>{
-    let query = format!("select * from passwords where site_name like '%{}%'", arg);
+fn row_with_index(mut conn : PooledConn, arg: String, table_name: String) -> Option<Vec<Row>>{
+    let query = format!("select * from {} where site_name like '%{}%'",table_name, arg);
     let result: Vec<Row> = conn.query(query).unwrap();
 
     if result.is_empty() {
@@ -137,18 +137,27 @@ fn row_with_index(mut conn : PooledConn, arg: String) -> Option<Vec<Row>>{
 }
 
 //Insert new record into database
-fn add(args: Vec<String>, mut conn: PooledConn) {
+fn add(args: Vec<String>, mut conn: PooledConn, table_name: String) {
+    let local: DateTime<Local> = Local::now();
+
+    let date : String = local.format("%d/%m/%Y").to_string();
+    let time : String = local.format("%I:%M %P").to_string();
+    // println!("{:?}", time);
     let query = format!(
-        "insert into passwords values('{}','{}','{}')",
-        args[0], args[1], args[2]
+        "insert into {} values('{}','{}','{}',STR_TO_DATE('{}', '%d/%m/%Y'),STR_TO_DATE('{}', '%h:%i %p'))",
+        table_name, args[0].trim(), args[1].trim(), args[2].trim(), date, time
     );
     conn.query_drop(query).unwrap();
     println!("Record added successfully!");
 }
 
 //Show all records in database, with filters if specified
-fn show(mut args: Vec<String>, mut conn: PooledConn) {
-    let mut query = String::from("select * from passwords");
+fn show(mut args: Vec<String>, mut conn: PooledConn, table_name: String) {
+    let mut query = format!(
+        "select site, username, password, DATE_FORMAT(entry_date, '%d/%m/%Y') as Date,
+        DATE_FORMAT(entry_time, '%h:%i %p') as Time from {} 
+        where site_name like '%{}%'",table_name, args[0]
+    );
 
     args.retain(|x| x != "all");
 
@@ -187,14 +196,16 @@ fn show(mut args: Vec<String>, mut conn: PooledConn) {
         return;
     }
     println!(
-        "\n{:^5}\t{:^13}\t{:^13}\t{:^13}\n",
-        "S.No", "Site Name", "User Name", "Password"
+        "\n{:^5}\t{:^16}\t{:^16}\t{:^16}\t{:^10}\t{:^10}\n",
+        "S.No", "Site Name", "User Name", "Password", "Time", "Date"
     );
     for (i,row) in ans.iter().enumerate() {
         let site: String = row.get("site_name").unwrap();
         let user: String = row.get("user_name").unwrap();
-        let password: String = row.get("password").unwrap();
-        println!("{:^5}\t{:^13}\t{:^13}\t{:^13}", i+1, site, user, password);
+        let pass: String = row.get("password").unwrap();
+        let date: String = row.get("date").unwrap();
+        let time: String = row.get("time").unwrap();
+        println!("{:^5}\t{:^16}\t{:^16}\t{:^16}\t{:^10}\t{:^10}", i+1, site, user, pass, date, time);
     }
 
 }
@@ -211,13 +222,15 @@ fn main() {
     let host;
     let port;
     let db;
+    let table_name;
     
     if let Some(data) = data {
         user = data.database.username;
         password = data.database.password;
         host = data.database.host;
         port = data.database.port;
-        db = data.database.db
+        db = data.database.db;
+        table_name = data.database.table_name;
     }
     else {
         println!("can't get the database information, check if config.toml file exists");
@@ -260,18 +273,20 @@ fn main() {
     let mut conn = pool.get_conn().unwrap();
 
     conn.query_drop(
-        "create table if not exists passwords (
+        format!("create table if not exists {} (
             site_name varchar(50),
             user_name varchar(50),
-            password varchar(50)
-        )",
+            password varchar(50),
+            date date,
+            time time
+        )", table_name)
     )
     .unwrap();
 
     match command.as_str() {
-        "show" => show(args[1..].to_vec(), conn),
-        "add" => add(args[1..].to_vec(), conn),
-        "del" => delete(args[1].to_string(), pool),
+        "show" => show(args[1..].to_vec(), conn, table_name),
+        "add" => add(args[1..].to_vec(), conn, table_name),
+        "del" => delete(args[1].to_string(), pool, table_name),
         _ => println!("Invalid command: {}, Try running 'pass help'", command),
     }
 }

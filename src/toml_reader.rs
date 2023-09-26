@@ -9,6 +9,7 @@ pub struct Database {
     pub username: String,
     pub password: String,
     pub db: String,
+    pub table_name: String,
 }
 
 #[derive(Deserialize)]
